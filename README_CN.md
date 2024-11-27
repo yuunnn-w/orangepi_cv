@@ -77,7 +77,7 @@ cd orangepi_cv
    make
    sudo make install
    sudo cp uSockets/src/libusockets.h /usr/local/include/uWebSockets/
-   sudo mv uSockets/uSockets.a /usr/lib/x86_64-linux-gnu/libuSockets.a
+   sudo mv uSockets/uSockets.a /usr/lib/aarch64-linux-gnu/libuSockets.a
    cd ..
    ```
 
