@@ -1,4 +1,7 @@
 # YOLO Object Detection Server for OrangePi 5 Max
+<p align="left">
+    <a href="README_CN.md">中文</a>&nbsp ｜ &nbspEnglish&nbsp
+</p>
 
 ## Overview
 
