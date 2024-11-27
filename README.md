@@ -44,7 +44,8 @@ sudo apt-get update
 sudo apt-get install -y build-essential cmake git libopencv-dev libuvc-dev zlib1g-dev
 # wiringpi need to install from another way.
 ```
-For OrangePi you should install [wiringOP](https://github.com/orangepi-xunlong/wiringOP)
+For OrangePi you should install [wiringOP](https://github.com/orangepi-xunlong/wiringOP).
+You can download [wiringpi_2.57.deb](https://github.com/orangepi-xunlong/orangepi-build/blob/next/external/cache/debs/arm64/wiringpi_2.57.deb) to install directly by `dpkg`.
 
 ### Step 2: Clone the Repository
 
