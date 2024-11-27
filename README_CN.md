@@ -23,11 +23,11 @@
 
 本项目采用 GPL-3.0 许可证。
 
-## 前提条件
+## 先决条件
 
 在开始之前，请确保您已满足以下要求：
 
-- **OrangePi 5 Max 开发板**：项目专为 OrangePi 5 Max 设计。
+- **OrangePi 5 Max 开发板**：项目专为 OrangePi 5 Max 设计，请在开发板端进行编译。
 - **操作系统**：兼容的 Linux 发行版（例如，Ubuntu、Debian）。
 - **依赖项**：
   - CMake (>= 3.10)
@@ -45,7 +45,7 @@
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake git libopencv-dev libuvc-dev zlib1g-dev
+sudo apt-get install -y build-essential gcc g++ cmake git libopencv-dev libuvc-dev zlib1g-dev
 # wiringpi 需要通过其他方式安装。
 ```
 对于 OrangePi，您需要安装 [wiringOP](https://github.com/orangepi-xunlong/wiringOP)。
