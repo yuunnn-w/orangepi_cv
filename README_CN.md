@@ -45,7 +45,7 @@
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential gcc g++ cmake git libopencv-dev libuvc-dev zlib1g-dev
+sudo apt-get install -y build-essential gcc g++ cmake ninja-build git libopencv-dev libuvc-dev libusb-1.0-0-dev zlib1g-dev
 # wiringpi 需要通过其他方式安装。
 ```
 对于 OrangePi，您需要安装 [wiringOP](https://github.com/orangepi-xunlong/wiringOP)。
