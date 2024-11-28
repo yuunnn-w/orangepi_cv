@@ -1,36 +1,54 @@
-﻿# CMakeList.txt: pi_cv_server 的 CMake 项目，在此处包括源代码并定义
-# 项目特定的逻辑。
-#
-cmake_minimum_required (VERSION 3.8)
+﻿cmake_minimum_required(VERSION 3.8)
 
-# 如果支持，请为 MSVC 编译器启用热重载。
-if (POLICY CMP0141)
-  cmake_policy(SET CMP0141 NEW)
-  set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
+# 项目名称
+project(orangepi_cv)
+
+# 启用MSVC编译器的热重载（如果支持）
+if(POLICY CMP0141)
+    cmake_policy(SET CMP0141 NEW)
+    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
+find_package(OpenCV REQUIRED) #很奇怪opencv只能这样找，pkg-config找不太行
+find_package(PkgConfig REQUIRED)
+#pkg_check_modules(OpenCV REQUIRED opencv) # 查找OpenCV库
+pkg_check_modules(LIBUVC REQUIRED libuvc) # 查找libuvc库
+pkg_check_modules(LIBUSB REQUIRED libusb-1.0) # 查找libusb库
 
-project ("pi_cv_server")
+# 将src目录下的所有.cpp文件和main.cpp加入到项目中
+file(GLOB SOURCES "src/*.cpp" "main.cpp")
 
-# 将源代码添加到此项目的可执行文件。
-add_executable (pi_cv_server "pi_cv_server.cpp" "pi_cv_server.h" "server.h" "server.cpp" "main.cpp")
+# 添加可执行文件目标
+add_executable(orangepi_cv ${SOURCES})
 
-if (CMAKE_VERSION VERSION_GREATER 3.12)
-  set_property(TARGET pi_cv_server PROPERTY CXX_STANDARD 20)
+# 添加头文件路径
+include_directories(
+    #/usr/include/libuvc
+    include
+    /usr/local/include/uWebSockets
+    #/usr/include/opencv4
+    ${CMAKE_SOURCE_DIR}/include
+    ${LIBUVC_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS}
+    ${LIBUSB_1_INCLUDE_DIRS}
+)
+
+# 设置C++标准
+if(CMAKE_VERSION VERSION_GREATER 3.12)
+    set_property(TARGET orangepi_cv PROPERTY CXX_STANDARD 20)
 else()
-  set(CMAKE_CXX_STANDARD 20)
-  set(CMAKE_CXX_STANDARD_REQUIRED ON)
-  set(CMAKE_CXX_EXTENSIONS OFF)
+    set(CMAKE_CXX_STANDARD 20)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_CXX_EXTENSIONS OFF)
 endif()
 
-# TODO: 如有需要，请添加测试并安装目标。
-
-# 添加uWebSockets头文件路径
-include_directories(/usr/local/include/uWebSockets)
-
-target_link_libraries(pi_cv_server
+# 链接库
+target_link_libraries(orangepi_cv
     uSockets
     pthread
     z
     crypto
-    ssl
+    ssl # 往上都是uWebSockets必须的链接库
+    ${LIBUVC_LIBRARIES}
+    ${OpenCV_LIBS}
+    ${LIBUSB_1_LIBRARIES}
 )

@@ -22,33 +22,33 @@ void WebSocketServer::setupRoutes() {
         .open = [this](auto* ws) { handleOpen(ws); }, // 连接打开时的处理函数
         .message = [this](auto* ws, std::string_view message, uWS::OpCode opCode) { handleMessage(ws, message, opCode); }, // 接收到消息时的处理函数
         .close = [this](auto* ws, int code, std::string_view message) { handleClose(ws, code, message); } // 连接关闭时的处理函数
-        }).ws<PerSocketData>("/help", {
-            /* Settings */
-            .compression = uWS::SHARED_COMPRESSOR, // 启用共享压缩器
-            .maxPayloadLength = 16 * 1024, // 最大消息负载长度为16KB
-            .idleTimeout = 10, // 空闲超时时间为10秒
-            .maxBackpressure = 1 * 1024 * 1024, // 最大背压为1MB
-            .closeOnBackpressureLimit = false, // 达到背压限制时不关闭连接
-            .resetIdleTimeoutOnSend = true, // 发送消息时重置空闲超时
-            .sendPingsAutomatically = true, // 自动发送Ping消息以保持连接活跃
-            /* Handlers */
-            .open = [this](auto* ws) { handleOpen(ws); }, // 连接打开时的处理函数
-            .message = [this](auto* ws, std::string_view message, uWS::OpCode opCode) { handleMessage(ws, message, opCode); }, // 接收到消息时的处理函数
-            .close = [this](auto* ws, int code, std::string_view message) { handleClose(ws, code, message); } // 连接关闭时的处理函数
-            }).ws<PerSocketData>("/tool", {
-                /* Settings */
-                .compression = uWS::SHARED_COMPRESSOR, // 启用共享压缩器
-                .maxPayloadLength = 16 * 1024, // 最大消息负载长度为16KB
-                .idleTimeout = 10, // 空闲超时时间为10秒
-                .maxBackpressure = 1 * 1024 * 1024, // 最大背压为1MB
-                .closeOnBackpressureLimit = false, // 达到背压限制时不关闭连接
-                .resetIdleTimeoutOnSend = true, // 发送消息时重置空闲超时
-                .sendPingsAutomatically = true, // 自动发送Ping消息以保持连接活跃
-                /* Handlers */
-                .open = [this](auto* ws) { handleOpen(ws); }, // 连接打开时的处理函数
-                .message = [this](auto* ws, std::string_view message, uWS::OpCode opCode) { handleMessage(ws, message, opCode); }, // 接收到消息时的处理函数
-                .close = [this](auto* ws, int code, std::string_view message) { handleClose(ws, code, message); } // 连接关闭时的处理函数
-                });
+    }).ws<PerSocketData>("/help", {
+        /* Settings */
+        .compression = uWS::SHARED_COMPRESSOR, // 启用共享压缩器
+        .maxPayloadLength = 16 * 1024, // 最大消息负载长度为16KB
+        .idleTimeout = 10, // 空闲超时时间为10秒
+        .maxBackpressure = 1 * 1024 * 1024, // 最大背压为1MB
+        .closeOnBackpressureLimit = false, // 达到背压限制时不关闭连接
+        .resetIdleTimeoutOnSend = true, // 发送消息时重置空闲超时
+        .sendPingsAutomatically = true, // 自动发送Ping消息以保持连接活跃
+        /* Handlers */
+        .open = [this](auto* ws) { handleOpen(ws); }, // 连接打开时的处理函数
+        .message = [this](auto* ws, std::string_view message, uWS::OpCode opCode) { handleMessage(ws, message, opCode); }, // 接收到消息时的处理函数
+        .close = [this](auto* ws, int code, std::string_view message) { handleClose(ws, code, message); } // 连接关闭时的处理函数
+    }).ws<PerSocketData>("/tool", {
+        /* Settings */
+        .compression = uWS::SHARED_COMPRESSOR, // 启用共享压缩器
+        .maxPayloadLength = 16 * 1024, // 最大消息负载长度为16KB
+        .idleTimeout = 10, // 空闲超时时间为10秒
+        .maxBackpressure = 1 * 1024 * 1024, // 最大背压为1MB
+        .closeOnBackpressureLimit = false, // 达到背压限制时不关闭连接
+        .resetIdleTimeoutOnSend = true, // 发送消息时重置空闲超时
+        .sendPingsAutomatically = true, // 自动发送Ping消息以保持连接活跃
+        /* Handlers */
+        .open = [this](auto* ws) { handleOpen(ws); }, // 连接打开时的处理函数
+        .message = [this](auto* ws, std::string_view message, uWS::OpCode opCode) { handleMessage(ws, message, opCode); }, // 接收到消息时的处理函数
+        .close = [this](auto* ws, int code, std::string_view message) { handleClose(ws, code, message); } // 连接关闭时的处理函数
+    });
 }
 
 // 处理WebSocket连接打开事件
@@ -92,5 +92,5 @@ void WebSocketServer::run() {
         else {
             std::cout << "Failed to listen on port 9001" << std::endl; // 监听端口9001失败
         }
-        }).run(); // 启动服务器
+    }).run(); // 启动服务器
 }
