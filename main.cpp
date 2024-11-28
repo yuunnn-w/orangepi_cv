@@ -7,7 +7,7 @@
 #include <chrono>
 #include <unistd.h>
 
-// Ñ­»·´Ó¶ÓÁĞ»ñÈ¡×îĞÂµÄÔ­Ê¼Í¼ÏñÊı¾İ
+// å¾ªç¯ä»é˜Ÿåˆ—è·å–æœ€æ–°çš„åŸå§‹å›¾åƒæ•°æ®
 void capture_images() {
     int loop_count = 100;
     double total_time = 0.0;
@@ -17,10 +17,10 @@ void capture_images() {
 
         cv::Mat latest = image_queue.get_latest_raw();
         if (!latest.empty()) {
-            // ´¦ÀíÍ¼ÏñÊı¾İ£¬Èç±£´æ
-            std::string filename = "/root/code/test.jpg";
+            // å¤„ç†å›¾åƒæ•°æ®ï¼Œå¦‚ä¿å­˜
+            std::string filename = "./test.jpg";
             //std::cout << "Saved img!" << std::endl;
-            cv::imwrite(filename, latest);  // ±£´æÍ¼Ïñ£¬¸²¸ÇÒÑÓĞÎÄ¼ş
+            cv::imwrite(filename, latest);  // ä¿å­˜å›¾åƒï¼Œè¦†ç›–å·²æœ‰æ–‡ä»¶
         }
         else
         {
@@ -42,31 +42,31 @@ int main() {
     //WebSocketServer server;
     //server.run();
 
-    // ¶¨ÒåÏà»ú²ÎÊı
-    uint16_t vid = 0x1bcf;  // Ìæ»»ÎªÊµ¼ÊµÄ Vendor ID
-    uint16_t pid = 0x2cd1;  // Ìæ»»ÎªÊµ¼ÊµÄ Product ID
-    uvc_frame_format format = UVC_FRAME_FORMAT_MJPEG;  // Í¼Ïñ¸ñÊ½
-    int width = 1920;                                // Í¼Ïñ¿í¶È
-    int height = 1080;                               // Í¼Ïñ¸ß¶È
-    int fps = 60;                                   // Ö¡ÂÊ
+    // å®šä¹‰ç›¸æœºå‚æ•°
+    uint16_t vid = 0x1bcf;  // æ›¿æ¢ä¸ºå®é™…çš„ Vendor ID
+    uint16_t pid = 0x2cd1;  // æ›¿æ¢ä¸ºå®é™…çš„ Product ID
+    uvc_frame_format format = UVC_FRAME_FORMAT_MJPEG;  // å›¾åƒæ ¼å¼
+    int width = 1920;                                // å›¾åƒå®½åº¦
+    int height = 1080;                               // å›¾åƒé«˜åº¦
+    int fps = 60;                                   // å¸§ç‡
 
-    Camera camera(vid, pid);// ´´½¨Ïà»ú¶ÔÏó
+    Camera camera(vid, pid);// åˆ›å»ºç›¸æœºå¯¹è±¡
     std::cout << "Init camera!" << std::endl;
-    if (!camera.open()) { // ´ò¿ªÏà»úÉè±¸
+    if (!camera.open()) { // æ‰“å¼€ç›¸æœºè®¾å¤‡
         std::cerr << "Failed to open camera device." << std::endl;
         return -1;
     }
-    if (!camera.configure_stream(format, width, height, fps)) { // ÅäÖÃÁ÷²ÎÊı
+    if (!camera.configure_stream(format, width, height, fps)) { // é…ç½®æµå‚æ•°
         std::cerr << "Failed to configure stream parameters." << std::endl;
         return -1;
     }
-    if (!camera.start()) { // Æô¶¯Á÷
+    if (!camera.start()) { // å¯åŠ¨æµ
         std::cerr << "Failed to start streaming." << std::endl;
         return -1;
     }
     std::cout << "Start Catching!" << std::endl;
-    usleep(200000); // 200000 microseconds = 0.2 seconds µÈ´ı0.2ÃëÈÃÉè±¸³¹µ×Æô¶¯£¨Î¢ÃëusÎªµ¥Î»£©
-    // Æô¶¯Ò»¸öÏß³ÌÀ´²¶»ñÍ¼Ïñ
+    usleep(200000); // 200000 microseconds = 0.2 seconds ç­‰å¾…0.2ç§’è®©è®¾å¤‡å½»åº•å¯åŠ¨ï¼ˆå¾®ç§’usä¸ºå•ä½ï¼‰
+    // å¯åŠ¨ä¸€ä¸ªçº¿ç¨‹æ¥æ•è·å›¾åƒ
     std::thread capture_thread(capture_images);
     capture_thread.join();
     camera.stop();
