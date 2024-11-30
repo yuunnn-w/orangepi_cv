@@ -2,6 +2,7 @@
 ## RKNPU 驱动 0.9.8 版本
 
 The official driver provided has issues and needs the following modifications:
+
 官方提供的驱动存在问题，需要进行如下修改：
 
 1. Add the following code to the `include/rknpu_mm.h` header file:
@@ -27,4 +28,5 @@ static inline void vm_flags_clear(struct vm_area_struct *vma, vm_flags_t flags)
 ```
 
 Here is the modified code. If you need to install this driver, please recompile the kernel using [orangepi-build](https://github.com/orangepi-xunlong/orangepi-build), replace all the code in this directory to the `kernel/orange-pi-6.1-rk35xx/drivers` directory, delete the previously compiled .o files, and then recompile.
+
 这里给出的是修改后的代码。如需安装该驱动，请使用 [orangepi-build](https://github.com/orangepi-xunlong/orangepi-build) 重新编译内核，将该目录的所有代码替换至 `kernel/orange-pi-6.1-rk35xx/drivers` 目录下，删除原先编译好的 .o 文件，然后重新编译即可。
