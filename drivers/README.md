@@ -1,9 +1,8 @@
-## RKNPU driver 0.9.8 version
-## RKNPU 驱动 0.9.8 版本
+# RKNPU driver 0.9.8 version
 
-The official driver provided has issues and needs the following modifications:
+**The official driver provided has issues and needs the following modifications.**
 
-官方提供的驱动存在问题，需要进行如下修改：
+**官方提供的驱动存在问题，需要进行如下修改。**
 ****
 **1. Add the following code to the `include/rknpu_mm.h` header file:**
 
