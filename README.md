@@ -44,7 +44,7 @@ First, install the necessary dependencies:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential gcc g++ cmake ninja-build git libopencv-dev libuvc-dev libusb-1.0-0-dev zlib1g-dev librga-dev ninja-build
+sudo apt-get install -y build-essential gcc g++ cmake ninja-build git libopencv-dev libuvc-dev libusb-1.0-0-dev zlib1g-dev librga-dev ninja-build gdb
 # wiringpi need to install from another way.
 ```
 For OrangePi you should install [wiringOP](https://github.com/orangepi-xunlong/wiringOP).
