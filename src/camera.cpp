@@ -147,10 +147,17 @@ void Camera::stop() {
 void Camera::frame_callback(uvc_frame_t* frame, void* user_ptr) {
     if (frame) {
         uvc_frame_t* rgb = uvc_allocate_frame(frame->width * frame->height * 3); // 分配空间用于RGB格式的图像
+        /*
+        if (!rgb) {
+            printf("unable to allocate bgr frame!\n");
+            return;
+        }
+        */
         uvc_mjpeg2rgb(frame, rgb); // 使用 uvc_mjpeg2rgb 转换MJPEG到RGB
         cv::Mat img(rgb->height, rgb->width, CV_8UC3, rgb->data); // 创建cv::Mat对象，使用转换后的RGB数据
         image_queue.push_raw(img.clone()); // 将 Mat 加入队列，深拷贝！
-        //std::cerr << "Push img successfully!" << std::endl;
+        uvc_free_frame(rgb);
+        // std::cerr << "Push img successfully!" << std::endl;
         return;
     }
     else

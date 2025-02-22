@@ -1,74 +1,170 @@
 // main.cpp
+
 #include "server.h"
 #include "camera.h"
 #include "threadsafequeue.h"
+#include "rknn_model.h"
+#include "utils.h"
+#include "servo_driver.h"
+
 #include <iostream>
 #include <thread>
 #include <chrono>
 #include <unistd.h>
 
-// å¾ªç¯ä»é˜Ÿåˆ—è·å–æœ€æ–°çš„åŸå§‹å›¾åƒæ•°æ®
-void capture_images() {
-    int loop_count = 100;
-    double total_time = 0.0;
+#include <pthread.h>
+#include <sched.h>
 
-    for (int i = 0; i < loop_count; ++i) {
-        auto start_time = std::chrono::high_resolution_clock::now();
-
-        cv::Mat latest = image_queue.get_latest_raw();
-        if (!latest.empty()) {
-            // å¤„ç†å›¾åƒæ•°æ®ï¼Œå¦‚ä¿å­˜
-            std::string filename = "./test.jpg";
-            //std::cout << "Saved img!" << std::endl;
-            cv::imwrite(filename, latest);  // ä¿å­˜å›¾åƒï¼Œè¦†ç›–å·²æœ‰æ–‡ä»¶
-        }
-        else
-        {
-            std::cout << "Empty img!" << std::endl;
-        }
-
-        auto end_time = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-        total_time += duration;
+// ÉèÖÃÏß³ÌµÄ CPU Ç×ºÍĞÔ
+void setThreadAffinity(std::thread& thread, int core_id) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core_id, &cpuset);
+    int result = pthread_setaffinity_np(thread.native_handle(), sizeof(cpu_set_t), &cpuset);
+    if (result != 0) {
+        std::cerr << "Failed to set thread affinity: " << result << std::endl;
     }
-
-    double average_time = total_time / loop_count;
-    std::cout << "Average Time:" << average_time << " ms" << std::endl;
 }
 
+// Æô¶¯Ïß³ÌµÄº¯Êı
+void start_threads(std::vector<std::thread>& inference_threads, rknn_model& model, int num_threads) {
+    for (int i = 0; i < num_threads; ++i) {
+		inference_threads.emplace_back(inference_images, std::ref(model), i); // Æô¶¯ÍÆÀíÏß³Ì
+        setThreadAffinity(inference_threads.back(), 4 + i); // °ó¶¨µ½ºËĞÄ4,5,6
+    }
+}
 
+// µÈ´ı²¢ÇåÀíÏß³ÌµÄº¯Êı
+void join_threads(std::vector<std::thread>& inference_threads) {
+    for (size_t i = 0; i < inference_threads.size(); ++i) {
+        if (inference_threads[i].joinable()) {
+            inference_threads[i].join();
+        }
+    }
+    inference_threads.clear();
+}
+
+void controlSystemState() {
+    // ĞİÃß10Ãë
+    std::this_thread::sleep_for(std::chrono::seconds(10));
+
+    // ½« system_sleep ¸ÄÎª true
+    system_sleep = true;
+    std::cout << "system_sleep set to true." << std::endl;
+
+    // ĞİÃß2Ãë
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+
+    // ½« system_sleep ¸Ä»Ø false
+    system_sleep = false;
+    std::cout << "system_sleep set to false." << std::endl;
+
+    // ĞİÃß5Ãë
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    // ½« poweroff ¸ÄÎª true
+    poweroff = true;
+    std::cout << "poweroff set to true." << std::endl;
+}
 
 int main() {
     //WebSocketServer server;
     //server.run();
-
-    // å®šä¹‰ç›¸æœºå‚æ•°
-    uint16_t vid = 0x1bcf;  // æ›¿æ¢ä¸ºå®é™…çš„ Vendor ID
-    uint16_t pid = 0x2cd1;  // æ›¿æ¢ä¸ºå®é™…çš„ Product ID
-    uvc_frame_format format = UVC_FRAME_FORMAT_MJPEG;  // å›¾åƒæ ¼å¼
-    int width = 1920;                                // å›¾åƒå®½åº¦
-    int height = 1080;                               // å›¾åƒé«˜åº¦
-    int fps = 60;                                   // å¸§ç‡
-
-    Camera camera(vid, pid);// åˆ›å»ºç›¸æœºå¯¹è±¡
-    std::cout << "Init camera!" << std::endl;
-    if (!camera.open()) { // æ‰“å¼€ç›¸æœºè®¾å¤‡
+    /*************************************************************************/
+    // ³õÊ¼»¯USBÉãÏñÍ·
+    // ¶¨ÒåÏà»ú²ÎÊı
+	uint16_t vid = 0x1bcf; // ³§ÉÌID£¬Ê¹ÓÃlsusbÃüÁî²é¿´
+	uint16_t pid = 0x2cd1; // ²úÆ·ID
+    uvc_frame_format format = UVC_FRAME_FORMAT_MJPEG; // Í¼Ïñ¸ñÊ½
+    int width = 1280;                                 // Í¼Ïñ¿í¶È
+    int height = 720;                                // Í¼Ïñ¸ß¶È
+    int fps = 30;                                     // Ö¡ÂÊ
+    Camera camera(vid, pid);// ´´½¨Ïà»ú¶ÔÏó
+    std::cout << "Init Camera!" << std::endl;
+    if (!camera.open()) { // ´ò¿ªÏà»úÉè±¸
         std::cerr << "Failed to open camera device." << std::endl;
         return -1;
     }
-    if (!camera.configure_stream(format, width, height, fps)) { // é…ç½®æµå‚æ•°
-        std::cerr << "Failed to configure stream parameters." << std::endl;
+    camera.configure_stream(format, width, height, fps); // ÅäÖÃÁ÷²ÎÊı
+	camera.start(); // Æô¶¯Á÷
+	std::cout << "Start Camera!" << std::endl;
+    usleep(200000); // µÈ´ı0.2ÃëÈÃÉè±¸³¹µ×Æô¶¯£¨µ¥Î»Î¢Ãëus£©
+    // ³õÊ¼»¯USBÉãÏñÍ·½áÊø
+    /*************************************************************************/
+    //³õÊ¼»¯RKNN YOLOÄ£ĞÍ
+    std::string model_path = "/root/.vs/orangepi_cv/yolo11s.rknn";
+    rknn_model model(model_path); // ³õÊ¼»¯Ä£ĞÍ
+    int num_threads = 2; // Ö¸¶¨ÍÆÀíÏß³ÌµÄÊıÁ¿£¬×î´óÎª3
+    std::vector<std::thread> inference_threads; //´æ´¢ÍÆÀíÏß³Ì¾ä±ú
+    //Ä£ĞÍ¼ÓÔØÍê±Ï
+    /*************************************************************************/
+    //³õÊ¼»¯¶æ»ú¿ØÖÆÄ£¿é
+    ServoDriver servoDriver("/dev/ttyUSB0");
+    if (servoDriver.openPort()) {
+        std::cerr << "Open port successfully." << std::endl;
+    }
+    else {
+        std::cerr << "Failed to open port." << std::endl;
         return -1;
     }
-    if (!camera.start()) { // å¯åŠ¨æµ
-        std::cerr << "Failed to start streaming." << std::endl;
-        return -1;
+    uint8_t servo1 = 1;
+    uint8_t servo2 = 2;
+    std::string version = servoDriver.getSoftwareVersion(servo1);
+    // ´òÓ¡¶æ»ú1µÄÈí¼ş°æ±¾
+    std::cout << "Servo Software Version: " << version << std::endl;
+	servoDriver.setAngleLimits(servo1, -135.0, 125.0); // ÉèÖÃ¶æ»ú1µÄ½Ç¶ÈÏŞÖÆ
+    usleep(10000); // Ğ´Ö¸ÁîÒ»°ãÒªµÈ´ı10ºÁÃë
+	servoDriver.setAngleLimits(servo2, -65, 85); // ÉèÖÃ¶æ»ú2µÄ½Ç¶ÈÏŞÖÆ
+    usleep(10000);
+    std::cerr << "Set angle limit done." << std::endl;
+	//¶æ»ú¿ØÖÆÄ£¿é³õÊ¼»¯Íê±Ï
+    /*************************************************************************/
+	// ³õÊ¼»¯ÏµÍ³×´Ì¬¹ÜÀí±äÁ¿
+    stop_inference = false;
+    system_sleep = false;
+    poweroff = false;
+    is_sleeping = false; // ±êÖ¾±äÁ¿£¬±íÊ¾ÏµÍ³ÊÇ·ñÒÑ¾­½øÈëË¯Ãß×´Ì¬
+
+    // Æô¶¯ÍÆÀíÏß³Ì
+    start_threads(inference_threads, model, num_threads);
+
+    // Æô¶¯¶æ»ú¿ØÖÆÏß³Ì
+    std::thread servo_thread(control_servo, std::ref(servoDriver), servo1, servo2);
+    
+    
+    std::thread control_thread(controlSystemState); // Æô¶¯ÏµÍ³×´Ì¬¹ÜÀí²âÊÔ
+
+    while (true) {
+        if (system_sleep) {
+            if (!is_sleeping) {
+                // Èç¹ûÏµÍ³Î´½øÈëË¯Ãß×´Ì¬£¬ÔòÖ´ĞĞË¯Ãß²Ù×÷
+                stop_inference = true;
+                join_threads(inference_threads);
+                std::cerr << "System start to sleep..." << std::endl;
+                is_sleeping = true; // ±ê¼ÇÏµÍ³ÒÑ½øÈëË¯Ãß×´Ì¬
+            }
+        }
+        else {
+            if (is_sleeping) {
+                // Èç¹ûÏµÍ³´ÓË¯Ãß×´Ì¬»Ö¸´£¬ÔòÖØĞÂÆô¶¯Ïß³Ì
+                stop_inference = false;
+                start_threads(inference_threads, model, num_threads);
+                std::cerr << "System restart..." << std::endl;
+                is_sleeping = false; // ±ê¼ÇÏµÍ³ÒÑ»Ö¸´ÔËĞĞ
+            }
+        }
+        if (poweroff) {
+            std::cout << "System is powering off..." << std::endl;
+            break;
+        }
+        usleep(100000); // ĞİÏ¢100ºÁÃë
     }
-    std::cout << "Start Catching!" << std::endl;
-    usleep(200000); // 200000 microseconds = 0.2 seconds ç­‰å¾…0.2ç§’è®©è®¾å¤‡å½»åº•å¯åŠ¨ï¼ˆå¾®ç§’usä¸ºå•ä½ï¼‰
-    // å¯åŠ¨ä¸€ä¸ªçº¿ç¨‹æ¥æ•è·å›¾åƒ
-    std::thread capture_thread(capture_images);
-    capture_thread.join();
+
+    stop_inference = true;
+    join_threads(inference_threads);
+    // µÈ´ı¿ØÖÆÏß³Ì½áÊø
+    control_thread.join();
     camera.stop();
+
     return 0;
 }

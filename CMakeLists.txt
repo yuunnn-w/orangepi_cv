@@ -10,6 +10,15 @@ if(POLICY CMP0141)
 endif()
 find_package(OpenCV REQUIRED) #很奇怪opencv只能这样找，pkg-config找不太行
 find_package(PkgConfig REQUIRED)
+# find_package(nlohmann_json CONFIG REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(nlohmann_json REQUIRED)
+find_library(RGA_LIBRARY NAMES rga)
+
+
+# sudo apt-get install libeigen3-dev
+# sudo apt-get install nlohmann-json3-dev
+
 #pkg_check_modules(OpenCV REQUIRED opencv) # 查找OpenCV库
 pkg_check_modules(LIBUVC REQUIRED libuvc) # 查找libuvc库
 pkg_check_modules(LIBUSB REQUIRED libusb-1.0) # 查找libusb库
@@ -30,6 +39,9 @@ include_directories(
     ${LIBUVC_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
     ${LIBUSB_1_INCLUDE_DIRS}
+    ${EIGEN3_INCLUDE_DIRS}
+    ${nlohmann_json_INCLUDE_DIRS}
+    /usr/include/rga
 )
 
 # 设置C++标准
@@ -41,6 +53,13 @@ else()
     set(CMAKE_CXX_EXTENSIONS OFF)
 endif()
 
+find_library(RKNN_API_LIBRARY NAMES rknnrt PATHS /usr/lib)
+if(RKNN_API_LIBRARY)
+    target_link_libraries(orangepi_cv ${RKNN_API_LIBRARY})
+else()
+    message(FATAL_ERROR "Could not find librknnrt.so")
+endif()
+
 # 链接库
 target_link_libraries(orangepi_cv
     uSockets
@@ -48,7 +67,17 @@ target_link_libraries(orangepi_cv
     z
     crypto
     ssl # 往上都是uWebSockets必须的链接库
+    tbb
+    nlohmann_json::nlohmann_json
+    #nlohmann_json
     ${LIBUVC_LIBRARIES}
     ${OpenCV_LIBS}
     ${LIBUSB_1_LIBRARIES}
+    ${RGA_LIBRARY}
+    ${EIGEN3_LIBRARIES}
+    #${nlohmann_json_LIBRARIES}
+
 )
+
+# 设置 C++ 编译选项以启用 O3 优化
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
