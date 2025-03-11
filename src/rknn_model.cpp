@@ -364,6 +364,9 @@ int rknn_model::run_inference(cv::Mat& input_image, int& ctx_index, object_detec
         return {};
     }
     crop_image_to_square_and_16_alignment(input_image);
+	//crop_to_square_and_resize(input_image, 640); // 裁剪到正方形并缩放到640x640
+	// 打印输入图像的尺寸
+	// std::cout << "Input image size: " << input_image.cols << "x" << input_image.rows << std::endl;
     uint8_t fill_color = 114;
 
     letterbox_t letter_box;

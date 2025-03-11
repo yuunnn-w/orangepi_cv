@@ -1,32 +1,60 @@
-#ifndef _KALMANFILTER_H_
-#define _KALMANFILTER_H_
+#ifndef KALMAN_FILTER_H
+#define KALMAN_FILTER_H
 
-#include <iostream>
-#include <Eigen/Dense> // 使用Eigen库进行矩阵运算
-//#include <Eigen/Sparse> // 使用Eigen库进行稀疏矩阵运算
 #include <vector>
+#include <Eigen/Dense>
 
 class KalmanFilter {
 public:
-    // 构造函数：初始化状态向量、状态转移矩阵、观测矩阵、过程噪声和观测噪声
-    KalmanFilter();
+    /**
+     * @brief 构造函数，初始化滤波器基本参数
+     * @param dt 时间步长
+     * @param q 过程噪声方差向量（6维，对应6个状态变量）
+     * @param r 观测噪声方差向量（2维，对应θx和θy）
+     */
+    KalmanFilter(double dt, const std::vector<double>& q, const std::vector<double>& r);
 
-    void init(double x, double y, double v_x = 0, double v_y = 0, double a_x = 0, double a_y = 0); // 初始化状态向量
+    /**
+     * @brief 初始化状态向量和协方差矩阵
+     * @param initial_state 初始状态向量（6维：θx, θy, ωx, ωy, αx, αy）
+     * @param initial_P 初始协方差矩阵对角线元素（6维）
+     */
+    void Init(const std::vector<double>& initial_state, const std::vector<double>& initial_P);
 
-    void update(double x_measurement, double y_measurement); // 更新状态：传入观测值 (x, y)
+    /**
+     * @brief 执行预测步骤
+     * @return 预测的角度值（θx, θy）
+     */
+    std::vector<double> Predict();
 
-	std::vector<double> getSmoothedState(); // 返回平滑后的状态值，不暴露 Eigen 数据类型
-
-    // 返回预测的下一时刻位置值，不暴露 Eigen 数据类型
-    std::vector<double> predictNextPosition();
+    /**
+     * @brief 执行更新步骤
+     * @param z 观测值（θx, θy）
+     * @return 更新后的最优估计角度值（θx, θy）
+     */
+    std::vector<double> Update(const std::vector<double>& z);
 
 private:
-    Eigen::VectorXd x_; // 状态向量 [x, y, v_x, v_y, a_x, a_y]
-    Eigen::MatrixXd F_; // 状态转移矩阵
-    Eigen::MatrixXd H_; // 观测矩阵
-    Eigen::MatrixXd Q_; // 过程噪声协方差矩阵
-    Eigen::MatrixXd R_; // 观测噪声协方差矩阵
-    Eigen::MatrixXd P_; // 状态协方差矩阵
+    // 状态向量 [θx, θy, ωx, ωy, αx, αy]
+    Eigen::VectorXd x;
+
+    // 误差协方差矩阵
+    Eigen::MatrixXd P;
+
+    // 观测矩阵（从状态中提取θx和θy）
+    Eigen::MatrixXd H;
+
+    // 状态转移矩阵
+    Eigen::MatrixXd F;
+
+    // 过程噪声协方差矩阵
+    Eigen::MatrixXd Q;
+
+    // 测量噪声协方差矩阵
+    Eigen::MatrixXd R;
+
+    // 时间步长
+    double dt;
 };
 
-#endif
+#endif // KALMAN_FILTER_H

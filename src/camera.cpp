@@ -9,6 +9,7 @@ Camera::Camera(uint16_t vid, uint16_t pid) {
     uvc_context_t* ctx;
     uvc_error_t res = uvc_init(&ctx, nullptr);
     if (res < 0) {
+		std::cerr << "Failed to initialize UVC" << std::endl;
         uvc_perror(res, "uvc_init"); // 打印初始化错误信息
         return;
     }
@@ -22,6 +23,7 @@ Camera::Camera(uint16_t vid, uint16_t pid) {
     this->ctx = ctx; //UVC上下文
     this->error = res; // 初始化错误码
     this->stream_ctrl = ctrl; // 初始化流控制结构体
+	std::cout << "Camera object created." << std::endl;
 }
 
 // 析构函数实现
@@ -34,13 +36,14 @@ bool Camera::open() {
     // 查找设备
     uvc_error_t res = uvc_find_device(ctx, &dev, vid, pid, nullptr);
     if (res < 0) {
+		std::cerr << "Failed to find camera device." << std::endl;
         uvc_perror(res, "uvc_find_device"); // 打印查找设备错误信息
         return false;
     }
-    puts("Device found");
     // 打开设备
     res = uvc_open(dev, &devh);
     if (res < 0) {
+		std::cerr << "Failed to open camera device." << std::endl;
         uvc_perror(res, "uvc_open"); // 打印打开设备错误信息
         uvc_unref_device(dev); // 释放设备引用
         return false;
@@ -109,7 +112,7 @@ bool Camera::configure_stream(uvc_frame_format format, uint32_t width, uint32_t 
 
 // 启动流实现
 bool Camera::start() {
-    uvc_error_t res = uvc_start_streaming(devh, &stream_ctrl, frame_callback, nullptr, 0);
+    uvc_error_t res = uvc_start_streaming(devh, &stream_ctrl, frame_callback, nullptr, 0); // (void*)12345
     if (res < 0) {
         uvc_perror(res, "start_streaming"); // 打印启动流错误信息
         uvc_close(devh); // 关闭设备
@@ -156,7 +159,7 @@ void Camera::frame_callback(uvc_frame_t* frame, void* user_ptr) {
         uvc_mjpeg2rgb(frame, rgb); // 使用 uvc_mjpeg2rgb 转换MJPEG到RGB
         cv::Mat img(rgb->height, rgb->width, CV_8UC3, rgb->data); // 创建cv::Mat对象，使用转换后的RGB数据
         image_queue.push_raw(img.clone()); // 将 Mat 加入队列，深拷贝！
-        uvc_free_frame(rgb);
+		uvc_free_frame(rgb); // 释放帧
         // std::cerr << "Push img successfully!" << std::endl;
         return;
     }

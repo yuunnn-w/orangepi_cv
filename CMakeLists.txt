@@ -33,7 +33,7 @@ add_executable(orangepi_cv ${SOURCES})
 include_directories(
     #/usr/include/libuvc
     include
-    /usr/local/include/uWebSockets
+    #/usr/local/include/uWebSockets
     #/usr/include/opencv4
     ${CMAKE_SOURCE_DIR}/include
     ${LIBUVC_INCLUDE_DIRS}
@@ -62,11 +62,11 @@ endif()
 
 # 链接库
 target_link_libraries(orangepi_cv
-    uSockets
-    pthread
-    z
-    crypto
-    ssl # 往上都是uWebSockets必须的链接库
+    #uSockets
+    #pthread
+    #z
+    #crypto
+    #ssl # 往上都是uWebSockets必须的链接库
     tbb
     nlohmann_json::nlohmann_json
     #nlohmann_json
@@ -81,3 +81,6 @@ target_link_libraries(orangepi_cv
 
 # 设置 C++ 编译选项以启用 O3 优化
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+
+# sudo apt-get install dos2unix
+# dos2unix install_rknpu.sh

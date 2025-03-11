@@ -1,62 +1,69 @@
-// kalmanfilter.cpp
 #include "kalmanfilter.h"
 
-KalmanFilter::KalmanFilter() {
-    // 状态向量：x, y, v_x, v_y, a_x, a_y
-    x_ = Eigen::VectorXd::Zero(6);
+KalmanFilter::KalmanFilter(double dt, const std::vector<double>& q, const std::vector<double>& r) : dt(dt) {
+    // 初始化状态转移矩阵F（6x6）
+    F = Eigen::MatrixXd::Identity(6, 6);
+    F(0, 2) = dt;         // θx 的更新与ωx相关
+    F(0, 4) = 0.5 * dt * dt;  // θx 的更新与αx相关
+    F(1, 3) = dt;         // θy 的更新与ωy相关
+    F(1, 5) = 0.5 * dt * dt;  // θy 的更新与αy相关
+    F(2, 4) = dt;         // ωx 的更新与αx相关
+    F(3, 5) = dt;         // ωy 的更新与αy相关
 
-    // 状态转移矩阵 F (假设时间步长为1)
-    F_ = Eigen::MatrixXd::Identity(6, 6);
-    F_(0, 2) = 1; // x += v_x
-    F_(1, 3) = 1; // y += v_y
-    F_(2, 4) = 1; // v_x += a_x
-    F_(3, 5) = 1; // v_y += a_y
+    // 初始化观测矩阵H（2x6）
+    H = Eigen::MatrixXd::Zero(2, 6);
+    H(0, 0) = 1;  // 观测θx
+    H(1, 1) = 1;  // 观测θy
 
-    // 观测矩阵 H (只能观测到x, y)
-    H_ = Eigen::MatrixXd::Zero(2, 6);
-    H_(0, 0) = 1; // 观测x
-    H_(1, 1) = 1; // 观测y
+    // 初始化过程噪声协方差矩阵Q（6x6对角矩阵）
+    Eigen::VectorXd q_diag = Eigen::VectorXd::Map(q.data(), q.size());
+    Q = q_diag.asDiagonal();
 
-    // 过程噪声协方差矩阵 Q
-    Q_ = Eigen::MatrixXd::Identity(6, 6) * 0.1;
-
-    // 观测噪声协方差矩阵 R
-    R_ = Eigen::MatrixXd::Identity(2, 2) * 1;
-
-    // 状态协方差矩阵 P
-    P_ = Eigen::MatrixXd::Identity(6, 6);
+    // 初始化测量噪声协方差矩阵R（2x2对角矩阵）
+    Eigen::VectorXd r_diag = Eigen::VectorXd::Map(r.data(), r.size());
+    R = r_diag.asDiagonal();
 }
 
-void KalmanFilter::init(double x, double y, double v_x, double v_y, double a_x, double a_y) {
-    x_ << x, y, v_x, v_y, a_x, a_y;
+void KalmanFilter::Init(const std::vector<double>& initial_state, const std::vector<double>& initial_P) {
+    // 初始化状态向量
+    x = Eigen::VectorXd::Map(initial_state.data(), initial_state.size());
+
+    // 初始化协方差矩阵（对角线元素）
+    Eigen::VectorXd p_diag = Eigen::VectorXd::Map(initial_P.data(), initial_P.size());
+    P = p_diag.asDiagonal();
 }
 
-// 更新状态：传入观测值 (x, y)
-void KalmanFilter::update(double x_measurement, double y_measurement) {
-    // 将观测值转换为向量
-    Eigen::Vector2d measurement;
-    measurement << x_measurement, y_measurement;
+std::vector<double> KalmanFilter::Predict() {
+    // 执行状态预测
+    x = F * x;
+
+    // 计算先验协方差矩阵
+    P = F * P * F.transpose() + Q;
+
+    // 返回预测的角度值
+    return { x(0), x(1) };
+}
+
+std::vector<double> KalmanFilter::Update(const std::vector<double>& z) {
+    // 将观测值转换为Eigen向量
+    Eigen::Vector2d z_eigen(z[0], z[1]);
+
+    // 计算观测残差
+    Eigen::Vector2d y = z_eigen - H * x;
+
+    // 计算残差协方差
+    Eigen::Matrix2d S = H * P * H.transpose() + R;
 
     // 计算卡尔曼增益
-    Eigen::MatrixXd K = P_ * H_.transpose() * (H_ * P_ * H_.transpose() + R_).inverse();
+    Eigen::MatrixXd K = P * H.transpose() * S.inverse();
 
-    // 更新状态
-    x_ = x_ + K * (measurement - H_ * x_);
+    // 更新状态估计
+    x = x + K * y;
 
-    // 更新协方差
-    P_ = (Eigen::MatrixXd::Identity(6, 6) - K * H_) * P_;
-}
+    // 更新协方差矩阵
+    Eigen::MatrixXd I = Eigen::MatrixXd::Identity(6, 6);
+    P = (I - K * H) * P;
 
-std::vector<double> KalmanFilter::getSmoothedState() {
-    std::vector<double> state;
-    state.reserve(6); // 预分配空间
-    for (int i = 0; i < 6; ++i) {
-        state.push_back(x_(i)); // 将 Eigen::VectorXd 转换为 std::vector<double>
-    }
-    return state;
-}
-
-std::vector<double> KalmanFilter::predictNextPosition() {
-    Eigen::VectorXd next_state = F_ * x_;  // 使用状态转移矩阵 F 预测下一时刻的状态
-    return { next_state(0), next_state(1) }; // 返回预测的位置 (x, y)
+    // 返回更新后的角度值
+    return { x(0), x(1) };
 }

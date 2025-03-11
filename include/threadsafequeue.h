@@ -10,6 +10,8 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 #include "common.h"
+#include "servo_driver.h"
+#include "utils.h"
 
 class ThreadSafeQueue {
 public:
@@ -21,17 +23,18 @@ public:
     void push_raw(const cv::Mat& img);
 
     // 入队推理结果，支持 JSON 格式和 object_detect_result_list 结构体
-    void push_inference(uint64_t sequence_number, const cv::Mat& img, const std::string& json_result, const object_detect_result_list& result_list);
+    void push_inference(uint64_t sequence_number, const cv::Mat& img, const std::string& json_result, const object_detect_result_list& result_list, const std::vector<float>& position);
 
     // 获取队列中的最新原始图像数据（深拷贝）及其序号
-    std::pair<uint64_t, cv::Mat> get_latest_raw();
+    std::tuple<uint64_t, cv::Mat, std::vector<float>> get_latest_raw();
 
     // 获取推理结果中的最新元素（深拷贝）及其序号
-    std::tuple<uint64_t, cv::Mat, std::string, object_detect_result_list> get_latest_inference();
+    std::tuple<uint64_t, cv::Mat, std::string, object_detect_result_list, std::vector<float>> get_latest_inference();
 
 private:
-    std::deque<std::pair<cv::Mat, uint64_t>> raw_queue;  // 原始图像队列，存储图像和序号
-    std::map<uint64_t, std::tuple<cv::Mat, std::string, object_detect_result_list>> inference_queue; // 推理结果队列，按序号排序
+    // std::deque<std::pair<cv::Mat, uint64_t>> raw_queue;  // 原始图像队列，存储图像和序号
+    std::deque<std::tuple<cv::Mat, uint64_t, std::vector<float>>> raw_queue; // 包括舵机位置
+    std::map<uint64_t, std::tuple<cv::Mat, std::string, object_detect_result_list, std::vector<float>>> inference_queue; // 推理结果队列，按序号排序
     std::mutex mutex_;  // 保护队列操作的互斥锁
     size_t max_raw_size_;  // 原始图像队列的最大长度
     size_t max_inference_size_;  // 推理结果队列的最大长度

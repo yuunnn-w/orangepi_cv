@@ -124,6 +124,58 @@ void crop_to_square_align16(const cv::Mat& src, cv::Mat& dst) {
     }
 }
 
+void crop_to_square_and_resize(cv::Mat& src, int target_size) {
+    // 获取源图像的宽度和高度
+    int src_width = src.cols;
+    int src_height = src.rows;
+
+    // 计算短边尺寸
+    int short_side = std::min(src_width, src_height);
+
+    // 确保裁剪后的正方形边长能被 16 整除
+    int cropped_side = (short_side / 16) * 16;
+
+    // 如果裁剪后的尺寸为 0，说明图像太小，无法满足 16 对齐
+    if (cropped_side <= 0) {
+        std::cerr << "Image is too small to crop to a 16-aligned square." << std::endl;
+        return;
+    }
+
+    // 计算裁剪区域的左上角坐标
+    int crop_x = (src_width - cropped_side) / 2;
+    int crop_y = (src_height - cropped_side) / 2;
+
+    // 使用 OpenCV 进行裁剪，得到正方形图像
+    cv::Mat cropped_square = src(cv::Range(crop_y, crop_y + cropped_side), cv::Range(crop_x, crop_x + cropped_side));
+
+    // 如果裁剪后的正方形图像已经是目标尺寸，直接复制到 src
+    if (cropped_side == target_size) {
+        src = cropped_square.clone();
+        return;
+    }
+
+    // 创建一个临时 Mat 用于存储缩放后的结果
+    cv::Mat resized_mat(target_size, target_size, src.type());
+
+    // 使用 RGA 进行缩放
+    rga_buffer_t src_buf = wrapbuffer_virtualaddr(cropped_square.data, cropped_side, cropped_side, RK_FORMAT_RGB_888);
+    rga_buffer_t dst_buf = wrapbuffer_virtualaddr(resized_mat.data, target_size, target_size, RK_FORMAT_RGB_888);
+
+    // 计算缩放比例
+    float scale = static_cast<float>(target_size) / cropped_side;
+
+    // 使用 RGA 进行缩放
+    IM_STATUS status = imresize(src_buf, dst_buf, scale, scale, INTER_LINEAR);
+    if (status != IM_STATUS_SUCCESS) {
+        std::cerr << "RGA resize failed: " << imStrError(status) << std::endl;
+        return;
+    }
+
+    // 将结果赋值回传入的 src
+    src = resized_mat;
+}
+
+
 /**
  * @brief 自适应裁剪填充函数，直接将结果写入目标虚拟地址
  * @param src 源图像的 cv::Mat 指针

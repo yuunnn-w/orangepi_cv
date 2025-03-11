@@ -1,5 +1,8 @@
 #include "servo_driver.h"  // 包含自定义的ServoDriver类的定义
 
+//初始化舵机控制模块
+ServoDriver servoDriver("/dev/ttyUSB0");
+
 ServoDriver::ServoDriver(const std::string& device):device(device){
     servoIDs.push_back(0x01); // 默认包含ID 1
 }
@@ -320,12 +323,12 @@ bool ServoDriver::setAndWaitForPosition(uint8_t servoID, float targetPosition) {
         float currentPosition = getCurrentPosition(servoID);
         //std::cout << "Current Position: " << currentPosition << " degrees" << std::endl;
 
-        if (std::abs(currentPosition - targetPosition) <= 1.0f) {
+        if (std::abs(currentPosition - targetPosition) <= 2.0f) {
             //std::cout << "Position reached within 1.0 degrees." << std::endl;
             break;
         }
         // 等待一段时间再读取当前位置
-        usleep(1000); // 等待1毫秒
+        usleep(10000); // 等待10毫秒
     }
     return true;
 }

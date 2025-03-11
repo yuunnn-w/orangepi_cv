@@ -153,6 +153,8 @@ const uint8_t LEN_REG_WRITE_FLAG = 1;
 const uint8_t ADDR_SPEED_ADJUSTMENT = 0x41;
 const uint8_t LEN_SPEED_ADJUSTMENT = 2;
 
+extern ServoDriver servoDriver; //全局变量舵机控制驱动
+
 
 #endif // SERVO_DRIVER_H
 
