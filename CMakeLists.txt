@@ -45,13 +45,12 @@ include_directories(
 )
 
 # 设置C++标准
-if(CMAKE_VERSION VERSION_GREATER 3.12)
-    set_property(TARGET orangepi_cv PROPERTY CXX_STANDARD 20)
-else()
-    set(CMAKE_CXX_STANDARD 20)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-    set(CMAKE_CXX_EXTENSIONS OFF)
-endif()
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
+
 
 find_library(RKNN_API_LIBRARY NAMES rknnrt PATHS /usr/lib)
 if(RKNN_API_LIBRARY)

@@ -222,6 +222,12 @@ void control_servo() {
 
     std::cout << "Kalman filter initialized." << std::endl;
 
+    // 定义每个舵机的角度限制
+    const double SERVO1_MIN_ANGLE = -135.0; // 舵机1的最小角度
+    const double SERVO1_MAX_ANGLE = 125.0;  // 舵机1的最大角度
+    const double SERVO2_MIN_ANGLE = -65; // 舵机2的最小角度
+    const double SERVO2_MAX_ANGLE = 80;  // 舵机2的最大角度
+
     while (!stop_inference.load()) {
         // 消息通知机制
         // 等待通知，直到 new_image_available 为 true 或 stop_inference 为 true
@@ -313,11 +319,16 @@ void control_servo() {
         // 根据平滑后的角度值控制舵机转到指定角度
         // 舵机互斥锁保护
         std::unique_lock<std::mutex> servo_lock(servo_mtx);
-        usleep(1000); // 等待10毫秒
-        servoDriver.setTargetPosition(1, smoothed_thetaX);
-        usleep(1000); // 等待10毫秒
-        servoDriver.setTargetPosition(2, smoothed_thetaY);
-        usleep(1000); // 等待10毫秒
+        // 检查smoothed_thetaX是否在舵机1的允许范围内
+        if (smoothed_thetaX >= SERVO1_MIN_ANGLE && smoothed_thetaX <= SERVO1_MAX_ANGLE) {
+            servoDriver.setTargetPosition(1, smoothed_thetaX);
+            usleep(10000); // 等待10毫秒
+        }
+        // 检查smoothed_thetaY是否在舵机2的允许范围内
+        if (smoothed_thetaY >= SERVO2_MIN_ANGLE && smoothed_thetaY <= SERVO2_MAX_ANGLE) {
+            servoDriver.setTargetPosition(2, smoothed_thetaY);
+            usleep(10000); // 等待10毫秒
+        }
         servo_lock.unlock();
     }
 }

@@ -37,7 +37,8 @@ extern std::atomic<bool> new_image_available;
 void inference_images(rknn_model& model, int ctx_index); // 推理函数
 std::pair<int, int> getTargetCenter(const object_detect_result_list& od_results); // 获取目标类别的第一个目标的中心坐标
 void calculateObjectAngles(float servoXAngle, float servoYAngle, int u, int v, float& thetaX, float& thetaY); // 计算物体在舵机坐标系中的角度坐标
-void control_servo(ServoDriver& servoDriver, int servo1, int servo2); // 控制舵机
+void control_servo(); // 控制舵机
+
 void show_inference(); // 显示推理结果
 
 #endif

@@ -4,6 +4,7 @@
 #include "rknn_model.h"
 #include "utils.h"
 #include "servo_driver.h"
+#include "server.h"
 
 #include <iostream>
 #include <thread>
@@ -27,7 +28,7 @@ void setThreadAffinity(std::thread& thread, int core_id) {
 // 启动线程的函数
 void start_threads(std::vector<std::thread>& inference_threads, rknn_model& model, int num_threads) {
     for (int i = 0; i < num_threads; ++i) {
-		inference_threads.emplace_back(inference_images, std::ref(model), i); // 启动推理线程
+        inference_threads.emplace_back(inference_images, std::ref(model), i); // 启动推理线程
         setThreadAffinity(inference_threads.back(), 4 + i); // 绑定到核心4,5,6
     }
 }
@@ -42,32 +43,7 @@ void join_threads(std::vector<std::thread>& inference_threads) {
     inference_threads.clear();
 }
 
-void controlSystemState() {
-    // 休眠10秒
-    std::this_thread::sleep_for(std::chrono::seconds(120));
-
-    // 将 system_sleep 改为 true
-    system_sleep = true;
-    std::cout << "system_sleep set to true." << std::endl;
-
-    // 休眠2秒
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-
-    // 将 system_sleep 改回 false
-    system_sleep = false;
-    std::cout << "system_sleep set to false." << std::endl;
-
-    // 休眠5秒
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-
-    // 将 poweroff 改为 true
-    poweroff = true;
-    std::cout << "poweroff set to true." << std::endl;
-}
-
 int main() {
-    //初始化舵机控制模块
-    // ServoDriver servoDriver("/dev/ttyUSB0");
     // 打开串口
     if (servoDriver.openPort()) {
         std::cerr << "Open port successfully." << std::endl;
@@ -81,13 +57,13 @@ int main() {
     std::string version = servoDriver.getSoftwareVersion(servo1);
     // 打印舵机1的软件版本
     std::cout << "Servo Software Version: " << version << std::endl;
-    servoDriver.setAngleLimits(servo1, -135.0, 125.0); // 设置舵机1的角度限制
-    usleep(10000); // 写指令一般要等待10毫秒
-    servoDriver.setAngleLimits(servo2, -65, 85); // 设置舵机2的角度限制
-    usleep(10000);
-    std::cerr << "Set angle limit done." << std::endl;
+    //servoDriver.setAngleLimits(servo1, -135.0, 125.0); // 设置舵机1的角度限制
+    //usleep(10000); // 写指令一般要等待10毫秒
+    //servoDriver.setAngleLimits(servo2, -65, 85); // 设置舵机2的角度限制
+    //usleep(10000);
+    //std::cerr << "Set angle limit done." << std::endl;
     // 将舵机复位至0度
-    servoDriver.setAndWaitForPosition(servo1, 30);
+    servoDriver.setAndWaitForPosition(servo1, 0);
     usleep(10000);
     servoDriver.setAndWaitForPosition(servo2, 45);
     usleep(10000);
@@ -117,7 +93,7 @@ int main() {
     //初始化RKNN YOLO模型
     std::string model_path = "/root/.vs/orangepi_cv/yolo11s.rknn";
     rknn_model model(model_path); // 初始化模型
-    int num_threads = 2; // 指定推理线程的数量，最大为3
+    int num_threads = 3; // 指定推理线程的数量，最大为3
     std::vector<std::thread> inference_threads; //存储推理线程句柄
     //模型加载完毕
     
@@ -128,16 +104,18 @@ int main() {
     is_sleeping = false; // 标志变量，表示系统是否已经进入睡眠状态
 
     // 启动推理线程
-    start_threads(inference_threads, model, num_threads);
+    start_threads(inference_threads, model, num_threads); // 重新启动推理线程
 	std::cerr << "Inference threads started." << std::endl;
     usleep(200000);
     // 启动舵机控制线程
     std::thread servo_thread(control_servo);
 	std::cerr << "Servo control thread started." << std::endl;
 	usleep(200000); // 休息200毫秒
-    std::thread control_thread(controlSystemState); // 启动系统状态管理测试
-	std::cerr << "Control thread started." << std::endl;
-    usleep(200000);
+	// 启动服务器
+    TCPServer server;
+	server.run(8080);
+	std::cerr << "Server started." << std::endl;
+
     while (true) {
 		if (system_sleep) { //如果要求系统进入睡眠状态
             if (!is_sleeping) {
@@ -155,6 +133,7 @@ int main() {
                 stop_inference = false;
 				start_threads(inference_threads, model, num_threads); // 重新启动推理线程
 				servo_thread = std::thread(control_servo); // 重新启动舵机控制线程
+                // std::thread servo_thread(control_servo);
                 std::cerr << "System restart..." << std::endl;
                 is_sleeping = false; // 标记系统已恢复运行
             }
@@ -169,8 +148,8 @@ int main() {
     stop_inference = true;
 	join_threads(inference_threads); // 等待推理线程结束
 	servo_thread.join(); // 等待舵机控制线程结束
-    control_thread.join(); // 等待控制线程结束
 	camera.stop(); // 停止相机捕获图像
+    server.stop();
 
     return 0; 
 }

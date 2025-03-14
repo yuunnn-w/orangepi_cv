@@ -22,8 +22,11 @@ void ThreadSafeQueue::push_raw(const cv::Mat& img) {
     // 获取当前舵机位置
     // 舵机互斥锁保护
 	std::unique_lock<std::mutex> servo_lock(servo_mtx);
+    usleep(5000); // 等待5毫秒
     float x_angle = servoDriver.getCurrentPosition(1);
+    usleep(2500); // 等待1毫秒
     float y_angle = servoDriver.getCurrentPosition(2);
+    usleep(2500); 
 	servo_lock.unlock();
 	// std::cout << "Servo1 Angle: " << x_angle << std::endl; //水平转动舵机
 	// std::cout << "Servo2 Angle: " << y_angle << std::endl; //垂直转动舵机
@@ -43,9 +46,8 @@ void ThreadSafeQueue::push_inference(uint64_t sequence_number, const cv::Mat& im
     if (inference_queue.size() > max_inference_size_) {
         inference_queue.erase(inference_queue.begin());
     }
-
     // 更新帧率统计
-    update_fps();
+    // update_fps();
 }
 
 std::tuple<uint64_t, cv::Mat, std::vector<float>> ThreadSafeQueue::get_latest_raw() {
