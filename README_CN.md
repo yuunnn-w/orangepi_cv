@@ -1,8 +1,8 @@
 # OrangePi 5 Max YOLO 目标检测服务器
 
-<p align = "left">
-中文& nbsp ｜& nbsp<a href = "README.md">English< / a>
-< / p>
+<p align="left">
+    中文&nbsp ｜ &nbsp<a href="README.md">English</a>
+</p>
 
 本项目实现了一个在 OrangePi 5 Max 开发板上运行的 YOLO 目标检测跟踪服务器。该服务器专为低空无人机的实时跟踪而设计，并具备舵机控制实时跟踪、红外与可见光双模图像处理、以及通过网络进行远程访问和控制等功能，且支持扩展为多基站构成阵列。项目使用 C++ 编写，支持跨平台编译，采用 CMake 构建系统。
 
