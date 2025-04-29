@@ -6,8 +6,6 @@
 #include <iostream>
 #include <rga/im2d.hpp>
 #include <rga/rga.h>
-//#include "../librga/include/im2d.hpp"
-//#include "../librga/include/rga.h"
 #include <cstring>
 #include "common.h"
 

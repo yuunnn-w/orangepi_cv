@@ -162,6 +162,15 @@ bool ServoDriver::regWrite(uint8_t id, uint8_t address, const std::vector<uint8_
     return sendCommand(command);
 }
 
+bool ServoDriver::syncWrite(uint8_t address, const std::vector<uint8_t>& data) {
+    // 生成同步写指令
+    std::vector<uint8_t> params = { address, 0x04 };
+    params.insert(params.end(), data.begin(), data.end()); // 添加舵机ID和对应的数据
+
+    auto command = generateCommand(0xFE, 0x83, params); // 生成同步写指令，广播ID为0xFE
+    return sendCommand(command); // 发送指令
+}
+
 bool ServoDriver::action() {
     auto command = generateCommand(0xFE, 0x05, {}); // 生成ACTION指令
     return sendCommand(command); // 发送指令
@@ -169,17 +178,6 @@ bool ServoDriver::action() {
 
 bool ServoDriver::reset(uint8_t id) {
     auto command = generateCommand(id, 0x06, {}); // 生成RESET指令
-    return sendCommand(command); // 发送指令
-}
-
-bool ServoDriver::syncWrite(uint8_t address, const std::vector<uint8_t>& data) {
-    if (data.size() % 2 != 0) { // 检查数据格式
-        std::cerr << "SYNC WRITE data format error." << std::endl;
-        return false;
-    }
-    std::vector<uint8_t> params = { address, static_cast<uint8_t>(data.size() / 2) }; // 参数包
-    params.insert(params.end(), data.begin(), data.end()); // 添加数据
-    auto command = generateCommand(0xFE, 0x83, params); // 生成同步写指令
     return sendCommand(command); // 发送指令
 }
 
@@ -247,6 +245,7 @@ bool ServoDriver::setAngleLimits(uint8_t id, float minAngle, float maxAngle) {
     return true;
 }
 
+// 设置舵机目标位置
 bool ServoDriver::setTargetPosition(uint8_t id, float angle) {
     // 检查角度范围
     if (angle < -SERVO_ANGLE_HALF_RANGE || angle > SERVO_ANGLE_HALF_RANGE) {
@@ -268,6 +267,60 @@ bool ServoDriver::setTargetPosition(uint8_t id, float angle) {
     return writeData(id, ADDR_TARGET_POSITION, { highByte, lowByte });
 }
 
+// 异步设置单个舵机目标位置
+bool ServoDriver::regSetTargetPosition(uint8_t id, float angle) {
+	// 检查角度范围
+	if (angle < -SERVO_ANGLE_HALF_RANGE || angle > SERVO_ANGLE_HALF_RANGE) {
+		std::cerr << "Angle out of range. Must be between -135 and 135 degrees." << std::endl;
+		return false;
+	}
+	// 计算转换系数
+	float conversionFactor = 4096.0f / SERVO_ANGLE_RANGE;
+	// 将角度转换为舵机需要的0~4095范围内的值
+	uint16_t targetPosition = static_cast<uint16_t>((angle + SERVO_ANGLE_HALF_RANGE) * conversionFactor);
+	// 将目标位置转换为两个字节的数据
+	uint8_t highByte = static_cast<uint8_t>(targetPosition >> 8);
+	uint8_t lowByte = static_cast<uint8_t>(targetPosition & 0xFF);
+	// 发送异步写指令
+	return regWrite(id, ADDR_TARGET_POSITION, { highByte, lowByte });
+}
+
+bool ServoDriver::syncSetTargetPositions(const std::vector<uint8_t>& ids, const std::vector<float>& angles) {
+    if (ids.size() != angles.size()) {
+        std::cerr << "Number of IDs and angles must be the same." << std::endl;
+        return false;
+    }
+    // 计算转换系数
+    float conversionFactor = 4096.0f / SERVO_ANGLE_RANGE;
+
+    // 准备同步写数据
+    std::vector<uint8_t> syncWriteData;
+    for (size_t i = 0; i < ids.size(); ++i) {
+        // 检查角度范围
+        if (angles[i] < -SERVO_ANGLE_HALF_RANGE || angles[i] > SERVO_ANGLE_HALF_RANGE) {
+            std::cerr << "Angle out of range for servo ID " << static_cast<int>(ids[i]) << ". Must be between -135 and 135 degrees." << std::endl;
+            return false;
+        }
+
+        // 将角度转换为舵机需要的0~4095范围内的值
+        uint16_t targetPosition = static_cast<uint16_t>((angles[i] + SERVO_ANGLE_HALF_RANGE) * conversionFactor);
+
+        // 将目标位置转换为两个字节的数据
+        uint8_t highByte = static_cast<uint8_t>(targetPosition >> 8);
+        uint8_t lowByte = static_cast<uint8_t>(targetPosition & 0xFF);
+
+        // 添加舵机ID和对应的数据
+        syncWriteData.push_back(ids[i]);
+        syncWriteData.push_back(highByte);
+        syncWriteData.push_back(lowByte);
+        syncWriteData.push_back(0x00);
+        syncWriteData.push_back(0x00);
+    }
+
+    // 发送同步写指令
+    return syncWrite(ADDR_TARGET_POSITION, syncWriteData);
+}
+
 float ServoDriver::getCurrentPosition(uint8_t id) {
     // 读取当前位置，地址为0x38和0x39，共2字节
     std::vector<uint8_t> positionData = readData(id, ADDR_CURRENT_POSITION, LEN_CURRENT_POSITION);
@@ -275,7 +328,7 @@ float ServoDriver::getCurrentPosition(uint8_t id) {
     // 检查读取的数据是否有效
     if (positionData.size() != 2) {
         std::cerr << "Failed to read current position." << std::endl;
-        return -999.0f; // 返回一个无效值
+        return std::nanf(""); // 返回一个无效值
     }
 
     // 将读取的数据合并为16位整数
@@ -285,7 +338,7 @@ float ServoDriver::getCurrentPosition(uint8_t id) {
     float conversionFactor = SERVO_ANGLE_RANGE / 4096.0f;
 
     // 将当前位置转换为角度值
-    float angle = (currentPosition * conversionFactor) - 135.0f;
+	float angle = (currentPosition * conversionFactor) - SERVO_ANGLE_HALF_RANGE;
 
     return angle;
 }
@@ -332,3 +385,4 @@ bool ServoDriver::setAndWaitForPosition(uint8_t servoID, float targetPosition) {
     }
     return true;
 }
+

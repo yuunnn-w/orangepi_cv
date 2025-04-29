@@ -13,8 +13,8 @@
 #include <cmath>
 #include <cstdint>
 
-#define SERVO_ANGLE_RANGE 270.0 //舵机最大转角
-#define SERVO_ANGLE_HALF_RANGE 135.0 //舵机最大转角的一半
+#define SERVO_ANGLE_RANGE 360.0 //舵机最大转角
+#define SERVO_ANGLE_HALF_RANGE 180.0 //舵机最大转角的一半
 
 class ServoDriver {
 public:
@@ -35,11 +35,14 @@ public:
     bool regWrite(uint8_t id, uint8_t address, const std::vector<uint8_t>& data); // REG WRITE指令
     bool action(); // ACTION指令
     bool reset(uint8_t id); // RESET指令
-    bool syncWrite(uint8_t address, const std::vector<uint8_t>& data); // SYNC WRITE指令
+    bool syncWrite(uint8_t address, const std::vector<uint8_t>& data);
 
     std::string getSoftwareVersion(uint8_t id); // 获取软件版本
     bool setAngleLimits(uint8_t id, float minAngle, float maxAngle); // 设置角度限制
     bool setTargetPosition(uint8_t id, float angle);  // 设置目标位置
+    bool regSetTargetPosition(uint8_t id, float angle); // 异步设置目标位置
+    bool syncSetTargetPositions(const std::vector<uint8_t>& ids, const std::vector<float>& angles);// 同步设置目标位置
+
     float getCurrentPosition(uint8_t id); // 读取当前位置
     bool setMidPointAdjustment(uint8_t id, float angle); //设置中立位
     bool setAndWaitForPosition(uint8_t servoID, float targetPosition); //移动到目标位置并等待完成
@@ -157,4 +160,3 @@ extern ServoDriver servoDriver; //全局变量舵机控制驱动
 
 
 #endif // SERVO_DRIVER_H
-

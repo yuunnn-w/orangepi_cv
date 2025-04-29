@@ -14,9 +14,11 @@
 #include <arpa/inet.h> // For ntohl
 #include <fcntl.h>
 #include <errno.h>
+#include <nlohmann/json.hpp>
 
 #include "threadsafequeue.h"
 #include "utils.h"
+
 
 
 cv::Mat draw_detection_boxes(const cv::Mat& image, const object_detect_result_list& od_results);
@@ -123,22 +125,22 @@ private:
     }
 
     void handle_client(int client_fd) {
-        // Read command
         ssize_t read_result;
         uint32_t cmd_len;
+
         // 读取命令长度
         if ((read_result = read(client_fd, &cmd_len, sizeof(cmd_len))) == -1) {
             perror("Error reading command length");
-            close(client_fd); // 确保关闭客户端连接
+            close(client_fd);
             return;
         }
-        if (read_result == 0) { // 客户端关闭连接
+        if (read_result == 0) {
             close(client_fd);
             return;
         }
         cmd_len = ntohl(cmd_len);
 
-        if (cmd_len > 255) { // 防止缓冲区溢出
+        if (cmd_len > 255) {
             perror("Command length too long");
             close(client_fd);
             return;
@@ -150,24 +152,125 @@ private:
             close(client_fd);
             return;
         }
-        if (read_result < cmd_len) { // 处理部分读取的情况
+        if (read_result < cmd_len) {
             perror("Incomplete command read");
             close(client_fd);
             return;
         }
         cmd[cmd_len] = '\0';
 
-        if (strcmp(cmd, "video") == 0) {
-            std::thread(&TCPServer::handle_video, this, client_fd).detach();
+        try {
+            // 解析JSON命令
+            json json_cmd = json::parse(cmd);
+
+            // 验证必须包含command字段
+            if (!json_cmd.contains("command") || !json_cmd["command"].is_string()) {
+                throw std::runtime_error("Missing or invalid 'command' field");
+            }
+
+            std::string command = json_cmd["command"].get<std::string>();
+
+            // 处理不同命令
+            if (command == "video") {
+                std::thread(&TCPServer::handle_video, this, client_fd).detach();
+            }
+            else if (command == "control") {
+                std::thread(&TCPServer::handle_control, this, client_fd).detach();
+                // 阻止舵机控制
+
+            }
+            // 控制舵机
+			else if (command == "servo") {
+                std::thread(&TCPServer::servo_control, this, client_fd).detach();
+			}
+			else if (command == "exit") {
+				close(client_fd);
+				return;
+
+			}
+            else {
+                std::cerr << "Unknown command: " << command << std::endl;
+                close(client_fd);
+            }
+
         }
-        else if (strcmp(cmd, "control") == 0) {
-            std::thread(&TCPServer::handle_control, this, client_fd).detach();
+        catch (const json::exception& e) {
+            std::cerr << "JSON parse error: " << e.what() << "\nReceived: " << cmd << std::endl;
+            close(client_fd);
         }
-        else {
-            // 处理未知命令或错误
-            perror("Unknown command");
+        catch (const std::exception& e) {
+            std::cerr << "Command error: " << e.what() << "\nReceived: " << cmd << std::endl;
+            close(client_fd);
+		}
+        catch (...) {
+            std::cerr << "Unknown error occurred while processing command: " << cmd << std::endl;
+            close(client_fd);
         }
     }
+
+	// 控制舵机
+    void servo_control(int client_fd) {
+		// 禁止自主控制
+		allow_auto_control = false;
+        while (m_running) {
+            try {
+                float angles[2] = { 0 };
+                // 直接读取8字节（两个float）
+                ssize_t total_read = 0;
+                char* buffer = reinterpret_cast<char*>(angles);
+
+                while (total_read < sizeof(angles)) {
+                    ssize_t bytes_read = read(client_fd,
+                        buffer + total_read,
+                        sizeof(angles) - total_read);
+
+                    if (bytes_read <= 0) {
+						std::cerr << " Error reading angles: " << strerror(errno) << std::endl;
+                        close(client_fd);
+						allow_auto_control = true;
+                        return ;
+                    }
+                    total_read += bytes_read;
+                }
+
+                // 直接使用内存中的数据（无需字节序转换）
+                // 设置舵机角度
+                // 舵机互斥锁保护
+                std::unique_lock<std::mutex> servo_lock(servo_mtx);
+                std::vector<uint8_t> ids = { 1, 2 };
+                // 根据全局舵机角度变量和接收到的偏移量计算新的舵机角度
+                // 这里 angles[0] 和 angles[1] 是舵机1和舵机2的角度偏移量
+                // 计算新的舵机角度
+                std::vector<float> angles_vec = {
+                    ServoXAngle + angles[0], // 舵机1的角度
+                    ServoYAngle + angles[1]  // 舵机2的角度
+                };
+				// 如果超出范围，则限制在范围内
+                // 限制舵机角度在范围内
+                angles_vec[0] = std::clamp(angles_vec[0], SERVO1_MIN_ANGLE, SERVO1_MAX_ANGLE); // 限制舵机1的角度
+                angles_vec[1] = std::clamp(angles_vec[1], SERVO2_MIN_ANGLE, SERVO2_MAX_ANGLE); // 限制舵机2的角度
+				
+                // 同步控制舵机
+                servoDriver.syncSetTargetPositions(ids, angles_vec);
+                usleep(15000); // 等待15毫秒
+                servo_lock.unlock();
+            }
+			catch (const std::exception& e) {
+				std::cerr << "Error in servo control: " << e.what() << std::endl;
+				break;
+			}
+			catch (...) {
+				std::cerr << "Unknown error occurred in servo control" << std::endl;
+				break;
+			}
+		}
+		// 允许自主控制
+		allow_auto_control = true;
+		close(client_fd);
+        std::cout << "Servo control connection closed" << std::endl;
+    };
+
+
 
     void handle_video(int client_fd) {
         const int target_fps = 30; // 目标帧率，可根据需要调整
@@ -188,7 +291,9 @@ private:
                 // JPEG编码
                 std::vector<uint8_t> buffer;
                 cv::imencode(".jpg", output_frame, buffer, { cv::IMWRITE_JPEG_QUALITY, 90 });
-
+				// WEBP编码，帧率很低而且占用CPU较高
+				// cv::imencode(".webp", output_frame, buffer, { cv::IMWRITE_WEBP_QUALITY, 90 }); // 0-100，大于100表示无损压缩
+                // cv::imencode(".png", output_frame, buffer, { cv::IMWRITE_PNG_COMPRESSION, 1 });
                 // 发送帧长度头
                 uint32_t frame_size = htonl(static_cast<uint32_t>(buffer.size()));
                 if (send(client_fd, &frame_size, sizeof(frame_size), 0) < 0) {
@@ -218,7 +323,7 @@ private:
 				//std::cout << "Slept for " << sleep_time.count() << " microseconds" << std::endl;
             }
             else {
-                // 处理超时，输出警告（可选）
+                // 处理超时，输出警告
                 //std::cerr << "Warning: Frame processing too slow to maintain target FPS\n";
             }
         }
@@ -228,118 +333,130 @@ private:
     }
 
     void handle_control(int client_fd) {
-        ssize_t read_result;
-        uint32_t ctrl_len;
-        // 读取控制命令长度
-        if ((read_result = read(client_fd, &ctrl_len, sizeof(ctrl_len))) == -1) {
-            perror("Error reading control command length");
-            close(client_fd);
-            return;
-        }
-        if (read_result == 0) { // 客户端关闭连接
-            close(client_fd);
-            return;
-        }
-        ctrl_len = ntohl(ctrl_len);
-        if (ctrl_len > 255) { // 防止缓冲区溢出
-            perror("Control command length too long");
-            close(client_fd);
-            return;
-        }
-        char ctrl_cmd[256];
-        if ((read_result = read(client_fd, ctrl_cmd, ctrl_len)) == -1) {
-            perror("Error reading control command");
-            close(client_fd);
-            return;
-        }
-        if (read_result < ctrl_len) { // 处理部分读取的情况
-            perror("Incomplete control command read");
-            close(client_fd);
-            return;
-        }
-        ctrl_cmd[ctrl_len] = '\0';
+        try {
+            // 第二阶段：接收操作指令
+            uint32_t phase2_len;
+            if (read(client_fd, &phase2_len, sizeof(phase2_len)) != sizeof(phase2_len)) {
+                throw std::runtime_error("Failed to read phase2 length");
+                // 关闭连接
+                close(client_fd);
+                return;
+            }
+            phase2_len = ntohl(phase2_len);
 
-        if (strcmp(ctrl_cmd, "getframenow") == 0) {
-            // 获取队列中的帧
-            std::tuple<uint64_t, cv::Mat, std::string, object_detect_result_list, std::vector<float>> inference_result;
-            inference_result = image_queue.get_latest_inference();
-            cv::Mat frame = std::get<cv::Mat>(inference_result); // 获取图像
-            object_detect_result_list od_results = std::get<object_detect_result_list>(inference_result); // 获取检测结果
-            // 调用绘制函数绘制检测框
-            cv::Mat output_frame = draw_detection_boxes(frame, od_results);
-            // 使用 JPEG 编码
-            std::vector<uint8_t> buffer;
-            cv::imencode(".webp", output_frame, buffer, { cv::IMWRITE_WEBP_QUALITY, 90 });
-            // 发送四字节的长度头
-            uint32_t frame_size = static_cast<uint32_t>(buffer.size());
-            frame_size = htonl(frame_size); // 转换为网络字节序
-            if (send(client_fd, &frame_size, sizeof(frame_size), 0) < 0) {
-                perror("send frame size");
+            if (phase2_len > 1024 * 1024) { // 限制1MB负载
+                throw std::runtime_error("Phase2 payload too large");
+                // 关闭连接
                 close(client_fd);
                 return;
             }
-            // 发送帧数据
-            if (send(client_fd, buffer.data(), buffer.size(), 0) < 0) {
-                perror("send frame data");
+
+            std::vector<char> phase2_buf(phase2_len + 1);
+            ssize_t received = 0;
+            while (received < phase2_len) {
+                ssize_t n = read(client_fd, phase2_buf.data() + received, phase2_len - received);
+                if (n <= 0) throw std::runtime_error("Phase2 read error");
+                received += n;
+            }
+            phase2_buf[phase2_len] = '\0';
+
+            // 解析操作指令
+            json phase2 = json::parse(phase2_buf.data());
+            std::string action = phase2["action"];
+            json params = phase2["params"];
+
+            // 处理命令
+            json response;
+            response["code"] = 200;
+            response["timestamp"] = time(nullptr);
+
+            if (action == "getframenow") {
+                // 获取最新帧数据
+                std::tuple<uint64_t, cv::Mat, std::string, object_detect_result_list, std::vector<float>> inference_result;
+                inference_result = image_queue.get_latest_inference();
+                cv::Mat frame = std::get<cv::Mat>(inference_result);
+                // object_detect_result_list od_results = std::get<object_detect_result_list>(inference_result); // 获取检测结果
+                // 调用绘制函数绘制检测框
+                // cv::Mat output_frame = draw_detection_boxes(frame, od_results);
+                // 使用 WEBP 编码
+                std::vector<uint8_t> buffer;
+                cv::imencode(".png", frame, buffer, { cv::IMWRITE_PNG_COMPRESSION, 1 });// 直接用png格式，无损格式
+                //cv::imencode(".webp", frame, buffer, { cv::IMWRITE_WEBP_QUALITY, 101 }); // 大于100表示无损压缩
+
+                // 构造响应
+                response["content"] = buffer;
+            }
+            else if (action == "sleep") {
+                system_sleep = true;
+                response["content"] = "Enter sleep mode";
+            }
+            else if (action == "wakeup") {
+                system_sleep = false;
+                response["content"] = "System wakeup";
+            }
+            else if (action == "poweroff") {
+                poweroff = true;
+                response["content"] = "System shutting down";
+            }
+            else if (action == "get_status") {
+                // 根据系统状态设置状态描述
+                std::string status = system_sleep ? "sleeping" : "running";
+                // 包含舵机位置和目标位置
+				response["content"]["ServoXAngle"] = std::to_string(ServoXAngle).c_str();
+				response["content"]["ServoYAngle"] = std::to_string(ServoYAngle).c_str();
+				response["content"]["TargetXAngle"] = std::to_string(targetX).c_str();
+				response["content"]["TargetYAngle"] = std::to_string(targetY).c_str();
+                // 包含自己的位置
+				response["content"]["SelfX"] = std::to_string(SELF_X).c_str();
+				response["content"]["SelfY"] = std::to_string(SELF_Y).c_str();
+
+                // 系统状态
+				response["content"]["system_status"] = status;
+				// 摄像头状态，处于可见光还是红外
+				response["content"]["camera_mode"] = camera_mode ? "infrared" : "visible";
+                // 是否识别到目标
+				response["content"]["target_detected"] = target_detected ? "yes" : "no";
+                // std::cout << "System status sent: " << status << std::endl;
+            }
+            else {
+                response["code"] = 404;
+                response["content"] = "Unsupported action";
+            }
+
+            // 发送响应
+            std::string json_str = response.dump();
+            uint32_t resp_len = htonl(json_str.size());
+
+            if (send(client_fd, &resp_len, sizeof(resp_len), 0) != sizeof(resp_len)) {
+                throw std::runtime_error("Send response length failed");
+                close(client_fd);
+                return;
+            }
+
+            if (send(client_fd, json_str.data(), json_str.size(), 0) != (ssize_t)json_str.size()) {
+                throw std::runtime_error("Send response failed");
                 close(client_fd);
                 return;
             }
         }
-        else if (strcmp(ctrl_cmd, "sleep") == 0) {
-			system_sleep = true;
-            std::cout << "system_sleep set to true." << std::endl;
-            // Send response
-            const char* resp = "Sleep Success";
-            uint32_t len = htonl(strlen(resp));
-            if (send(client_fd, &len, sizeof(len), 0) < 0) {
-                perror("send sleep response length");
-                close(client_fd);
-                return;
-            }
-            if (send(client_fd, resp, strlen(resp), 0) < 0) {
-                perror("send sleep response");
-                close(client_fd);
-                return;
-            }
+        catch (const json::exception& e) {
+            std::cerr << "JSON parse error: " << e.what() << std::endl;
+            // 关闭连接
+            close(client_fd);
+            return;
         }
-        else if (strcmp(ctrl_cmd, "poweroff") == 0) {
-            poweroff = true;
-            std::cout << "poweroff set to true." << std::endl;
-            // Send response then shutdown
-            const char* resp = "Poweroff Success";
-            uint32_t len = htonl(strlen(resp));
-            if (send(client_fd, &len, sizeof(len), 0) < 0) {
-                perror("send poweroff response length");
-                close(client_fd);
-                return;
-            }
-            if (send(client_fd, resp, strlen(resp), 0) < 0) {
-                perror("send poweroff response");
-                close(client_fd);
-                return;
-            }
-            // stop(); // 如果需要在此处停止服务，请取消注释此行
+        catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << std::endl;
+            return;
         }
-        else if (strcmp(ctrl_cmd, "wakeup") == 0) {
-            system_sleep = false;
-            std::cout << "system_sleep set to false." << std::endl;
-            // Send response then shutdown
-            const char* resp = "Wakeup Success";
-            uint32_t len = htonl(strlen(resp));
-            if (send(client_fd, &len, sizeof(len), 0) < 0) {
-                perror("send wakeup response length");
-                close(client_fd);
-                return;
-            }
-            if (send(client_fd, resp, strlen(resp), 0) < 0) {
-                perror("send wakeup response");
-                close(client_fd);
-                return;
-            }
-            // stop(); // 如果需要在此处停止服务，请取消注释此行
+        catch (...) {
+            std::cerr << "Unknown error occurred" << std::endl;
+            return;
         }
         close(client_fd);
+        return;
     }
+
 };
 
 #endif // SERVER_H

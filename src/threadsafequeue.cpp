@@ -28,6 +28,24 @@ void ThreadSafeQueue::push_raw(const cv::Mat& img) {
     float y_angle = servoDriver.getCurrentPosition(2);
     usleep(2500); 
 	servo_lock.unlock();
+	// 更新全局舵机角度变量
+	// 如果是无效值，则使用默认值
+	if (std::isnan(x_angle) && !std::isnan(y_angle)) {
+		x_angle = ServoXAngle;
+        ServoYAngle = y_angle;
+	}
+	else if (std::isnan(y_angle) && !std::isnan(x_angle)) {
+		y_angle = ServoYAngle;
+		ServoXAngle = x_angle;
+	}
+	else if (std::isnan(x_angle) && std::isnan(y_angle)) {
+		x_angle = ServoXAngle;
+		y_angle = ServoYAngle;
+	}
+	else {
+		ServoXAngle = x_angle;
+		ServoYAngle = y_angle;
+	}
 	// std::cout << "Servo1 Angle: " << x_angle << std::endl; //水平转动舵机
 	// std::cout << "Servo2 Angle: " << y_angle << std::endl; //垂直转动舵机
     // 构建舵机位置的vector

@@ -5,11 +5,21 @@ std::atomic<bool> stop_inference(false); // 定义 stop_inference 并初始化为 false
 std::atomic<bool> system_sleep(false);
 std::atomic<bool> poweroff(false);
 std::atomic<bool> is_sleeping(false); // 标志变量，表示系统是否已经进入睡眠状态
+std::atomic<bool> allow_auto_control(true); // 是否允许自主控制
+std::atomic<bool> camera_mode(false); // false: 可见光模式， true: 红外模式
 
 std::mutex mtx; // 互斥锁
 // 舵机互斥锁
 std::mutex servo_mtx;
 std::atomic<bool> new_image_available(false); // 标志变量，表示是否有新图像
+// 全局目标位置变量
+std::atomic<float> targetX(0.0);
+std::atomic<float> targetY(0.0);
+// 全局舵机角度变量
+std::atomic<float> ServoXAngle(0.0); // 舵机X轴角度
+std::atomic<float> ServoYAngle(0.0); // 舵机Y轴角度
+// 是否识别到目标
+std::atomic<bool> target_detected(false); // 标志变量，表示是否检测到目标
 
 
 // 将 object_detect_result_list 转换为 JSON 字符串
@@ -205,6 +215,33 @@ void calculateObjectAngles(float servoXAngle, float servoYAngle, int u, int v, f
 }
 
 
+// 转换函数，处理舵机角度的转换，返回 std::vector<float>
+std::vector<float> convertServoAngles(float thetaX, float thetaY) {
+    // 检查舵机1的角度是否超出范围
+    if (thetaX < SERVO1_MIN_ANGLE || thetaX > SERVO1_MAX_ANGLE) {
+        // 尝试找到一个等效的角度
+        float alternativeThetaX = thetaX - 180.0f;
+        if (alternativeThetaX < -180.0f) alternativeThetaX += 360.0f;
+        if (alternativeThetaX >= SERVO1_MIN_ANGLE && alternativeThetaX <= SERVO1_MAX_ANGLE) {
+            thetaX = alternativeThetaX;
+            thetaY = -thetaY; // 反转舵机2的角度
+        }
+        else {
+            // 如果等效的角度也超出范围，则返回边界值
+            thetaX = (thetaX < SERVO1_MIN_ANGLE) ? SERVO1_MIN_ANGLE : SERVO1_MAX_ANGLE;
+        }
+    }
+
+    // 检查舵机2的角度是否超出范围
+    if (thetaY < SERVO2_MIN_ANGLE || thetaY > SERVO2_MAX_ANGLE) {
+        // 如果超出范围，则返回边界值
+        thetaY = (thetaY < SERVO2_MIN_ANGLE) ? SERVO2_MIN_ANGLE : SERVO2_MAX_ANGLE;
+    }
+
+    // 返回转换后的角度值
+    return { thetaX, thetaY };
+}
+
 
 // 这里采用简化后的单目标ByteTrack算法控制舵机
 void control_servo() {
@@ -221,12 +258,6 @@ void control_servo() {
     double smoothed_thetaY = NAN;
 
     std::cout << "Kalman filter initialized." << std::endl;
-
-    // 定义每个舵机的角度限制
-    const double SERVO1_MIN_ANGLE = -135.0; // 舵机1的最小角度
-    const double SERVO1_MAX_ANGLE = 125.0;  // 舵机1的最大角度
-    const double SERVO2_MIN_ANGLE = -65; // 舵机2的最小角度
-    const double SERVO2_MAX_ANGLE = 80;  // 舵机2的最大角度
 
     while (!stop_inference.load()) {
         // 消息通知机制
@@ -289,12 +320,14 @@ void control_servo() {
         }
         else if (tracker.needs_activation()) { // 如果跟踪器未激活，说明长期处于无目标状态
             if (has_detection) { // 如果检测到目标
+				target_detected.store(true); // 设置标志变量为 true
                 calculateObjectAngles(servoXAngle, servoYAngle, u, v, detect_thetaX, detect_thetaY); // 计算角度观测值
                 // 激活跟踪器
                 tracker.initialize(detect_thetaX, detect_thetaY); // 传入角度观测值初始化跟踪器
             }
-            else { // 没有检测到目标，也没有激活跟踪器，说明系统处于休眠状态，需要跳过控制阶段
+			else { // 没有检测到目标，也没有激活跟踪器，说明多次未检测到目标，目标彻底丢失
                 // 跳过控制阶段
+				target_detected.store(false); // 设置标志变量为 false
                 continue;
             }
         }
@@ -303,6 +336,10 @@ void control_servo() {
         std::vector<double> p = tracker.predict();
         last_pred_thetaX = p[0]; // 更新上一步的预测值
         last_pred_thetaY = p[1]; // 更新上一步的预测值
+
+		// 更新全局目标位置变量
+		targetX.store(last_pred_thetaX);
+		targetY.store(last_pred_thetaY);
 
         // 平滑处理
         if (std::isnan(smoothed_thetaX) || std::isnan(smoothed_thetaY)) {
@@ -316,19 +353,22 @@ void control_servo() {
             smoothed_thetaY = smoothing_factor * last_pred_thetaY + (1 - smoothing_factor) * smoothed_thetaY;
         }
 
+        // 如果此时允许自主控制
+		if (!allow_auto_control.load()) {
+			// 跳过控制阶段
+			continue;
+		}
+
         // 根据平滑后的角度值控制舵机转到指定角度
         // 舵机互斥锁保护
         std::unique_lock<std::mutex> servo_lock(servo_mtx);
-        // 检查smoothed_thetaX是否在舵机1的允许范围内
-        if (smoothed_thetaX >= SERVO1_MIN_ANGLE && smoothed_thetaX <= SERVO1_MAX_ANGLE) {
-            servoDriver.setTargetPosition(1, smoothed_thetaX);
-            usleep(10000); // 等待10毫秒
-        }
-        // 检查smoothed_thetaY是否在舵机2的允许范围内
-        if (smoothed_thetaY >= SERVO2_MIN_ANGLE && smoothed_thetaY <= SERVO2_MAX_ANGLE) {
-            servoDriver.setTargetPosition(2, smoothed_thetaY);
-            usleep(10000); // 等待10毫秒
-        }
+        // usleep(5000); // 等待5毫秒
+
+        std::vector<uint8_t> ids = { 1, 2 };
+		std::vector<float> angles = convertServoAngles(smoothed_thetaX, smoothed_thetaY);
+		// 同步控制舵机
+		servoDriver.syncSetTargetPositions(ids, angles);
+		usleep(10000); // 等待10毫秒
         servo_lock.unlock();
     }
 }
